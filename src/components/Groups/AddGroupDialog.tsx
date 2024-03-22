@@ -23,10 +23,12 @@ export default function AddGroupDialog({
 	);
 
 	async function addGroup(data: /* GroupRow */ any) {
+		console.log('add group:', data);
 		if (!data.name) return false;
 
 		await post(`/groups/add`, data);
 
+		console.log('added group:', data);
 		return true;
 	}
 

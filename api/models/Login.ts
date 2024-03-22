@@ -21,6 +21,17 @@ export interface LoginDetails {
 }
 
 export class LoginManager {
+	public static async getIdForUsername(
+		req: IReq,
+		username: string
+	): Promise<UUID> {
+		const db = await Database.getInstance(req);
+
+		return db.query1('SELECT `userId` FROM `logins` WHERE `username` = ?', [
+			username,
+		]);
+	}
+
 	/**
 	 * Paginated querying of existing users. Used for activating accounts.
 	 * @param req

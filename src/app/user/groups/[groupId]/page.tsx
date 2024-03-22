@@ -5,13 +5,23 @@ import SendMessage from '@/components/SendMessage';
 import { getServerUser } from '@/lib/auth';
 import { UUID } from 'crypto';
 import { MessageCircle } from 'lucide-react';
+import { GroupRoleType, cGroupRoles } from '../../../../../api/models/Groups';
+import {
+	PermissionStatus,
+	PermissionType,
+} from '../../../../../api/models/Permissions';
+import PermissionsTable from '@/components/AdminDashboard/Permissions/PermissionsTable';
+import Link from 'next/link';
 
 export default async function ViewGroup({
 	params: { groupId },
 }: {
 	params: { groupId: UUID };
 }) {
-	const user = await getServerUser();
+	const user = (await getServerUser()) || {
+		userId: undefined,
+		jwt: undefined,
+	};
 
 	const { data } = await get(`/groups/single/${groupId}`, {
 		jwt: user?.jwt,
@@ -35,24 +45,100 @@ export default async function ViewGroup({
 
 	console.log('communications:', communications);
 
-	if (communications?.total) {
-		console.log('Group has', communications.total, 'communications!');
+	if (data?.visibleRoles) {
+		console.log('Group has roles:', data.visibleRoles);
 	}
 
 	if (!data) {
 		return <div>No data!</div>;
 	}
 
+	// Could just check visibleRoles, but this is more fun
+	const { data: permissionPermissions } = await post(
+		'/permission/validate',
+		{
+			permissionTypes: [
+				PermissionType.PERMISSIONS_READ,
+				PermissionType.PERMISSIONS_VERIFY,
+				PermissionType.PERMISSIONS_SUSPEND,
+			],
+		},
+		{
+			jwt: user?.jwt,
+		}
+	);
+
+	const getUsersRoleOnGroup = (): GroupRoleType | undefined => {
+		if (!data?.visibleRoles || !user.userId) {
+			return undefined;
+		}
+
+		if (data.visibleRoles.admins.some((u) => u.userId === user.userId)) {
+			return GroupRoleType.ADMIN;
+		}
+
+		if (data.visibleRoles.mods.some((u) => u.userId === user.userId)) {
+			return GroupRoleType.MOD;
+		}
+
+		if (data.visibleRoles.users.some((u) => u.userId === user.userId)) {
+			return GroupRoleType.USER;
+		}
+
+		return undefined;
+	};
+
+	const role = getUsersRoleOnGroup();
+
+	console.log({ role });
+
+	const canSeePermissionsTable =
+		role === GroupRoleType.ADMIN &&
+		permissionPermissions[PermissionType.PERMISSIONS_READ] &&
+		(permissionPermissions[PermissionType.PERMISSIONS_SUSPEND] ||
+			permissionPermissions[PermissionType.PERMISSIONS_VERIFY]);
+
 	return (
 		<div>
-			<div>
-				Viewing a single group: <b>{data.name}</b>
-			</div>
-			{/* <pre>{JSON.stringify(data, undefined, 2)}</pre> */}
-			{data.scope && <div>In {data.parentName}</div>}
-			<div className='mb-4'>
-				Created {new Date(data.createdAt).toDateString()} by{' '}
-				{data.createdByName}
+			<div style={{ display: 'flex', flexDirection: 'row' }}>
+				<div>
+					<div>
+						Viewing a single group: <b>{data.name}</b>
+					</div>
+					{/* <pre>{JSON.stringify(data, undefined, 2)}</pre> */}
+					{data.scope && <div>In {data.parentName}</div>}
+					<div className='mb-4'>
+						Created {new Date(data.createdAt).toDateString()} by{' '}
+						{data.createdByName}
+					</div>
+				</div>
+				<div style={{ flexGrow: 1 }}></div>
+				<div>
+					{!role ? (
+						<Link href={`/user/groups/${groupId}/join`}>
+							<button className='btn btn-warning'>
+								Not a member! Click to join
+							</button>
+						</Link>
+					) : (
+						''
+					)}
+					{role === GroupRoleType.ADMIN ? (
+						<button className='btn btn-success'>{role}</button>
+					) : (
+						''
+					)}
+					{role === GroupRoleType.MOD ? (
+						<button className='btn btn-warning'>{role}</button>
+					) : (
+						''
+					)}
+					{role === GroupRoleType.USER ? (
+						<button className='btn'>{role}</button>
+					) : (
+						''
+					)}
+				</div>
 			</div>
 			{communications.total ? (
 				<div
@@ -123,14 +209,37 @@ export default async function ViewGroup({
 							? ''
 							: 'There are no subgroups yet. Be the first to create one!'}
 					</p>
-					<div
-						style={{ textAlign: 'center' }}
-						className='mt-2'
-					>
-						<AddGroupDialog scope={groupId} />
-					</div>
+					{data.visibleRoles.users.some(
+						(u) => u.userId === user?.userId
+					) ? (
+						<div
+							style={{ textAlign: 'center' }}
+							className='mt-2'
+						>
+							<AddGroupDialog scope={groupId} />
+						</div>
+					) : (
+						''
+					)}
 				</div>
 			</div>
+			{canSeePermissionsTable ? (
+				<div className='mt-8'>
+					<PermissionsTable
+						title='Users awaiting approval'
+						searchParams={{
+							scope: groupId,
+							status: [PermissionStatus.UNVERIFIED],
+							pagination: {
+								page: 1,
+								limit: 100,
+							},
+						}}
+					/>
+				</div>
+			) : (
+				''
+			)}
 		</div>
 	);
 }

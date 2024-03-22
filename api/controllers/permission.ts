@@ -1,4 +1,6 @@
 import { IReq, IRes } from '../../sharedTypes';
+import { Database } from '../models/Database';
+import { LoginManager } from '../models/Login';
 import {
 	PermissionStatus,
 	PermissionType,
@@ -119,18 +121,58 @@ export async function getScopedPermissions(
 	req: IReq,
 	res: IRes
 ): Promise<IRes> {
-	const { username, scope, pagination } = req.query as any;
+	const {
+		userId: scopedToUserId,
+		username,
+		scope,
+		pagination,
+		status,
+	} = req.query as any;
 
-	const userId = req.currentUser?.userId || 'THIS-USER-DOES-NOT-EXIST';
+	let userId;
+
+	if (scopedToUserId) {
+		userId = scopedToUserId;
+	} else if (username) {
+		userId = await LoginManager.getIdForUsername(req, username);
+
+		if (!userId) {
+			return res.status(404).json([]);
+		}
+	}
+
+	console.log('getScopedPermissions', { username, scope, userId });
 
 	try {
-		// validate if user can manage global permissions
-		await validatePermission(req, userId, PermissionType.PERMISSIONS_READ);
+		// validate if user can manage permissions in scope
+		try {
+			if (!scope) {
+				const db = await Database.getInstance(req);
+				const permission = await db.query1r(
+					'SELECT * FROM permissionsMap WHERE userId = ? AND permissionType = ? AND scope IS NULL',
+					[req.currentUser.userId, PermissionType.PERMISSIONS_READ]
+				);
+
+				if (!permission) {
+					userId = req.currentUser.userId;
+				}
+			} else {
+				await validatePermission(
+					req,
+					req.currentUser.userId,
+					PermissionType.PERMISSIONS_READ,
+					scope
+				);
+			}
+		} catch (e) {
+			return res.sendStatus(403);
+		}
 
 		const data = await UserPermissions.getPermissionsList(req, {
 			scope,
 			userId,
 			pagination,
+			status,
 		});
 
 		return res.json(data);

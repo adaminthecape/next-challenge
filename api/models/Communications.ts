@@ -155,8 +155,6 @@ export class Communications {
 			return { communications: [], total, page: 1 };
 		}
 
-		console.log('limit:', opts.pagination.limit);
-
 		const communications = await db.select(
 			`SELECT 
 				c.*,
@@ -168,22 +166,6 @@ export class Communications {
 			WHERE (${wheres.join(' AND ')})
 			LIMIT ? OFFSET ?`,
 			params
-		);
-
-		console.log(
-			communications,
-			db.getFormattedQuery(
-				`SELECT 
-					c.*,
-					l1.username AS fromUsername,
-					l2.username AS toUsername
-				FROM \`communications\` c
-				LEFT JOIN \`logins\` l1 ON l1.userId = c.\`from\`
-				LEFT JOIN \`logins\` l2 ON l2.userId = c.\`to\`
-				WHERE (${wheres.join(' AND ')})
-				LIMIT ? OFFSET ?`,
-				params
-			)
 		);
 
 		return { communications, total, page: 1 };

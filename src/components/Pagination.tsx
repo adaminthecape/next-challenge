@@ -17,9 +17,17 @@ export default function Pagination({
 	replaceMap?: Record<string, string>;
 }) {
 	function getUrl(isNext: boolean): string {
-		const next = Math.ceil(Math.min(totalPages, (currentPage || 1) + 1));
-		const prev = Math.ceil(Math.max(1, (currentPage || 1) - 1));
+		let current = currentPage ?? 1;
+
+		if (typeof currentPage === 'string') {
+			current = parseInt(currentPage, 10);
+		}
+
+		const next = Math.ceil(Math.min(totalPages, current + 1));
+		const prev = Math.ceil(Math.max(1, current - 1));
 		const targetPage = isNext ? next : prev;
+
+		console.log({ next, prev, targetPage, current });
 
 		let vars = baseRoute.match(/\[\w+\]/gi) as string[];
 		let url = baseRoute.replace(

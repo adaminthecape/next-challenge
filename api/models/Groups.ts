@@ -2,7 +2,11 @@ import { UUID } from 'crypto';
 import { IReq } from '../../sharedTypes';
 import { Database } from './Database';
 import { handleError } from '../utils';
-import { PermissionType, UserPermissions } from './Permissions';
+import {
+	PermissionStatus,
+	PermissionType,
+	UserPermissions,
+} from './Permissions';
 
 export enum GroupStatus {
 	closed = 'closed',
@@ -61,6 +65,12 @@ export const cGroupRoles = {
 	USER,
 	MOD: [...USER, ...MOD],
 	ADMIN: [...USER, ...MOD, ...ADMIN],
+};
+
+export type GroupMemberCountRow = {
+	count: number;
+	username: string;
+	userId: UUID;
 };
 
 export class Groups {
@@ -366,5 +376,36 @@ export class Groups {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Find all users who have at least as many GRANTED permissions on the group
+	 * as the given user role.
+	 */
+	public async getGroupMembers(
+		roleType: GroupRoleType
+	): Promise<GroupMemberCountRow[]> {
+		const db = await Database.getInstance(this.req);
+
+		const roles = cGroupRoles[roleType];
+
+		if (!roles?.length) {
+			return [];
+		}
+
+		// Find all users who have at least as many GRANTED permissions on the
+		// group,
+		return db.select(
+			`SELECT 
+				COUNT(p.permissionType) AS count,
+				l.username,
+				l.userId
+			FROM \`logins\` l
+			LEFT JOIN \`permissionsMap\` p ON p.userId = l.userId
+			WHERE p.permissionType IN (?) AND p.status = ? AND p.scope = ?
+			GROUP BY l.username
+			HAVING count >= ?`,
+			[roles, PermissionStatus.ACTIVE, this.groupId, roles.length]
+		);
 	}
 }

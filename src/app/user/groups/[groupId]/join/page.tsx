@@ -38,8 +38,15 @@ export default async function JoinGroup({
 	if (status === 201) {
 		return (
 			<div style={{ textAlign: 'center' }}>
-				Your request to join has been sent and is awaiting admin
-				approval.
+				<div>
+					Your request to join has been sent and is awaiting admin
+					approval.
+				</div>
+				<button className='btn mt-2'>
+					<Link href={`/user/groups/${groupId}`}>
+						Go back to the group
+					</Link>
+				</button>
 			</div>
 		);
 	}

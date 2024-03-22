@@ -4,6 +4,8 @@ import { CSSRuleObject } from 'tailwindcss/types/config';
 import SearchBar from '@/components/SearchBar';
 import Pagination from '../../Pagination';
 import PermissionsRow from './PermissionsRow';
+import { PermissionStatus } from '../../../../api/models/Permissions';
+import { UUID } from 'crypto';
 
 const styles: Record<string, CSSRuleObject> = {
 	tableTopBar: {
@@ -25,22 +27,41 @@ const styles: Record<string, CSSRuleObject> = {
 	},
 };
 
-export default async function PermissionsTable({ searchParams }: any) {
+export default async function PermissionsTable({
+	title,
+	searchParams,
+}: {
+	title?: string;
+	searchParams: {
+		page?: number;
+		username?: string;
+		userId?: UUID;
+		scope?: string;
+		status?: PermissionStatus[];
+		pagination?: {
+			page: number;
+			limit?: number;
+			offset?: number;
+		};
+	};
+}) {
 	await validateServerUser();
 
-	const { page, username, scope } = searchParams;
+	const { page, username, scope, pagination, status, userId } = searchParams;
 
 	const params = {
+		userId,
 		username: username || '',
-		scope: scope || '',
-		pagination: {
+		scope: scope === 'any' ? null : scope,
+		status: status?.length ? status : undefined,
+		pagination: pagination || {
 			page,
 			limit: 8,
 		},
 	};
 
 	const session = await getServerUser();
-	const { data, status } =
+	const { data, status: responseStatus } =
 		(await post(`/permission/list`, params, {
 			jwt: session?.jwt,
 		})) || {};
@@ -49,7 +70,8 @@ export default async function PermissionsTable({ searchParams }: any) {
 	 * Obviously in production this would kick the user out and/or send
 	 * warnings to the devs. I'm doing this for demo purposes.
 	 */
-	if (status === 403) return <div>Nothing to see here, move along</div>;
+	if (responseStatus === 403)
+		return <div>Nothing to see here, move along</div>;
 	else if (!data) return <div>No records found.</div>;
 
 	return (
@@ -60,13 +82,16 @@ export default async function PermissionsTable({ searchParams }: any) {
 					style={styles.tableTopBar}
 					className='card'
 				>
-					<div>Dashboard - Permissions</div>
+					<div>{title || 'Dashboard - Permissions'}</div>
 					<SearchBar
 						placeholder='Search by username...'
-						baseRoute='/dashboard/permissions/table/[page]/search/[username]'
+						baseRoute='/dashboard/permissions/table/[page]/[scope]/[username]'
 						routeParams={{
 							page: 1,
+							scope,
 						}}
+						keywordParam='username'
+						replaceMap={{ scope: '/any' }}
 					/>
 				</div>
 				<table
@@ -109,10 +134,10 @@ export default async function PermissionsTable({ searchParams }: any) {
 								? data.total / data.limit
 								: 2
 						}
-						baseRoute='/dashboard/permissions/table/[page]/search/[username]'
+						baseRoute='/dashboard/permissions/table/[page]/[scope]/[username]'
 						pageParam='page'
 						routeParams={{ username }}
-						replaceMap={{ username: '/asdf' }}
+						replaceMap={{ username: '/', scope: '/any' }}
 					/>
 				</div>
 			</div>

@@ -69,7 +69,15 @@ export default async function GroupsTable({
 	 * Obviously in production this would kick the user out and/or send
 	 * warnings to the devs. I'm doing this for demo purposes.
 	 */
-	if (status === 403) return <div>Nothing to see here, move along</div>;
+	if (status === 403)
+		return (
+			<div
+				style={{ textAlign: 'center' }}
+				className='mt-8'
+			>
+				You must be a member of the group to see its subgroups.
+			</div>
+		);
 	else if (!data) return <div>No records found.</div>;
 
 	return (

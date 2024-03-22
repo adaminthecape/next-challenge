@@ -42,7 +42,7 @@ export default function PermissionsRow({
 						<div className='mask mask-squircle w-12 h-12'>
 							<Avatar
 								size={40}
-								name={permission.userId}
+								name={permission.userId?.split('-')[0]}
 								variant='marble'
 								colors={[
 									'#92A1C6',

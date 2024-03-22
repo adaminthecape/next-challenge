@@ -68,6 +68,13 @@ export interface PermissionMapRow {
 	status?: PermissionStatus;
 }
 
+export const cSelfManageablePermissions = [
+	PermissionType.ACCOUNT_VIEW,
+	PermissionType.COMMUNICATIONS_READ,
+	PermissionType.PERMISSIONS_READ,
+	PermissionType.PERMISSIONS_SUSPEND,
+	PermissionType.PROFILE_VIEW,
+];
 // The permission assignments on the system can be defined by super admins.
 // The permission *types* must be directly referenced in code, and cannot
 // be defined by super admins.
@@ -94,6 +101,7 @@ export class UserPermissions {
 		filters: {
 			scope?: UUID;
 			userId?: UUID;
+			status?: PermissionStatus[];
 			pagination?: {
 				page?: number;
 				limit?: number;
@@ -117,16 +125,17 @@ export class UserPermissions {
 
 		if (filters.scope) {
 			wheres.push('p.scope = ?');
-			params.push(
-				typeof filters.scope === 'number'
-					? filters.scope
-					: parseInt(filters.scope, 10)
-			);
+			params.push(filters.scope);
 		}
 
 		if (filters.userId) {
 			wheres.push('p.userId LIKE ?');
 			params.push(`%${filters.userId}%`);
+		}
+
+		if (filters.status?.length) {
+			wheres.push('p.`status` IN (?)');
+			params.push(filters.status);
 		}
 
 		params.push(
@@ -456,7 +465,8 @@ export class UserPermissions {
 	public async getPermission(
 		permissionType: PermissionType,
 		scope?: UUID,
-		states?: PermissionStatus[]
+		states?: PermissionStatus[],
+		forceNullScope?: boolean
 	): Promise<PermissionMapRow> {
 		const db = await Database.getInstance(this.req);
 
@@ -506,6 +516,17 @@ export class UserPermissions {
 		permissionType: PermissionType,
 		scope?: UUID
 	): Promise<boolean> {
+		if (
+			this.userId &&
+			this.req.currentUser.userId &&
+			this.userId === this.req.currentUser.userId &&
+			permissionType &&
+			cSelfManageablePermissions.includes(permissionType)
+		) {
+			// users can do some things to themselves
+			return true;
+		}
+
 		const usersPermission = await this.getPermission(permissionType, scope);
 
 		if (
@@ -519,6 +540,18 @@ export class UserPermissions {
 			// 		usersPermission?.scope === scope)
 			// )
 		) {
+			// is this a super admin for this permission?
+			const superAdminPermission = await this.getPermission(
+				permissionType,
+				undefined
+			);
+
+			console.log(`Super admin for ${permissionType}`);
+
+			if (superAdminPermission) {
+				return true;
+			}
+
 			throw new Error(`Not allowed! ${permissionType} on ${scope}`);
 		}
 

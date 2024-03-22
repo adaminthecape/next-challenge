@@ -3,6 +3,7 @@ import { IReq, IRes } from '../../sharedTypes';
 import {
 	cGroupRoles,
 	GroupApprovalType,
+	GroupMemberCountRow,
 	GroupRoleType,
 	Groups,
 	GroupStatus,
@@ -15,10 +16,41 @@ import {
 import { handleError } from '../utils';
 
 export async function getPageOfGroups(req: IReq, res: IRes): Promise<IRes> {
-	// validate that user can see groups in scope
 	try {
 		const { name, scope, pagination, userId, status, approvalType } =
 			req.query as any;
+
+		// validate that user can see groups in scope
+		if (scope) {
+			const [parentGroup] =
+				(
+					await Groups.getPageOfGroups(req, {
+						groupId: scope,
+						scope: 'any',
+						pagination: {
+							limit: 1,
+						},
+					})
+				)?.groups || [];
+
+			if (
+				parentGroup /*  && parentGroup.status !== GroupStatus.public */
+			) {
+				const usersPermissions = new UserPermissions(
+					req,
+					req.currentUser.userId
+				);
+
+				const { success } = await usersPermissions.validateMultiple(
+					cGroupRoles.USER,
+					scope
+				);
+
+				if (!success) {
+					return res.status(403).json({ groups: [], total: 0 });
+				}
+			}
+		}
 
 		const data = await Groups.getPageOfGroups(req, {
 			name,
@@ -41,6 +73,7 @@ export async function getPageOfGroups(req: IReq, res: IRes): Promise<IRes> {
 }
 
 export async function addGroup(req: IReq, res: IRes): Promise<IRes> {
+	console.log('addGroup:', req.currentUser.userId);
 	// validate that user can add groups in scope
 
 	// get the user's id so we know who created this
@@ -83,6 +116,8 @@ export async function addGroup(req: IReq, res: IRes): Promise<IRes> {
 		await group.requestRole(userId, GroupRoleType.ADMIN);
 		await group.assignRole(userId, GroupRoleType.ADMIN);
 
+		console.log('Done adding group:', groupId);
+
 		return res.status(200).json({ groupId });
 	} catch (e) {
 		handleError({
@@ -97,6 +132,7 @@ export async function addGroup(req: IReq, res: IRes): Promise<IRes> {
 export async function getSingleGroupData(req: IReq, res: IRes): Promise<IRes> {
 	try {
 		const { groupId } = req.params as { groupId: UUID };
+		const { userId } = req.currentUser;
 
 		const [group] =
 			(
@@ -128,6 +164,38 @@ export async function getSingleGroupData(req: IReq, res: IRes): Promise<IRes> {
 			}
 
 			const groupData = { ...group };
+
+			const handler = new Groups(req, groupId);
+
+			groupData.visibleRoles = {
+				users: [],
+				mods: [],
+				admins: [],
+			} as {
+				users: GroupMemberCountRow[];
+				mods: GroupMemberCountRow[];
+				admins: GroupMemberCountRow[];
+			};
+
+			const users = await handler.getGroupMembers(GroupRoleType.USER);
+			const mods = await handler.getGroupMembers(GroupRoleType.MOD);
+			const admins = await handler.getGroupMembers(GroupRoleType.ADMIN);
+
+			console.log({ users, mods, admins });
+
+			if (admins.some((admin) => admin.userId === userId)) {
+				groupData.visibleRoles.admins = admins;
+			}
+
+			if (mods.some((mod) => mod.userId === userId)) {
+				groupData.visibleRoles.mods = mods;
+			}
+
+			if (users.some((user) => user.userId === userId)) {
+				groupData.visibleRoles.users = users;
+			}
+
+			console.log(groupData.visibleRoles);
 
 			if (group.jsonData) {
 				try {
@@ -193,10 +261,11 @@ export async function joinGroup(req: IReq, res: IRes): Promise<IRes> {
 			approvalType === GroupApprovalType.never
 		) {
 			throw new Error('Group is closed!');
-		} else if (approvalType === GroupApprovalType.auto) {
+		} else if (status === GroupStatus.private) {
 			// does the user have permission to join this group?
 			// i.e. do they have permissions to verify themselves on the group
 			// or on a group above it
+			return res.sendStatus(403).json({ result: 'private' });
 		}
 
 		const success = await group.requestRole(userId, GroupRoleType.USER);
@@ -204,13 +273,11 @@ export async function joinGroup(req: IReq, res: IRes): Promise<IRes> {
 		if (success && approvalType === GroupApprovalType.auto) {
 			// also approve the user now
 			await group.assignRole(userId, GroupRoleType.USER);
+
+			return res.status(200).json({ result: 'joined' });
 		} else if (success) {
 			// TODO: notify group admins
 			return res.status(201).json({ result: 'requested' });
-		}
-
-		if (success) {
-			return res.status(200).json({ result: 'joined' });
 		}
 
 		return res.sendStatus(500);
