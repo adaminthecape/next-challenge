@@ -34,12 +34,15 @@ export namespace DbRow {
 }
 
 export class Database {
-	public static async getInstance(req: IReq): Promise<Database> {
+	public static async getInstance(
+		req: IReq,
+		isDebug?: boolean
+	): Promise<Database> {
 		if (req.db) {
 			return req.db;
 		}
 
-		const instance = new Database(req);
+		const instance = new Database(req, isDebug);
 
 		await instance.connect();
 
@@ -49,9 +52,10 @@ export class Database {
 	}
 
 	private req: IReq;
+	private isDebug?: boolean;
 	private connection: mysql.Connection | undefined;
 
-	constructor(req: IReq) {
+	constructor(req: IReq, isDebug?: boolean) {
 		this.req = req;
 	}
 
@@ -82,8 +86,11 @@ export class Database {
 		}
 	}
 
-	public async getFormattedQuery(query: string, params: any[]) {
-		return this.connection?.format(query, params);
+	public getFormattedQuery(query: string, params: any[]) {
+		return this.connection
+			?.format(query, params)
+			.replace(/\s\s+/g, ' ')
+			.trim();
 	}
 
 	public async query1r(
@@ -99,7 +106,19 @@ export class Database {
 		return parent?.[0];
 	}
 
-	private async query(
+	public async query1(queryString: string, params: any[] = []): Promise<any> {
+		if (!queryString.includes('LIMIT')) {
+			queryString += ' LIMIT 1';
+		}
+
+		const parent = await this.query(queryString, params);
+
+		if (!parent?.[0]) return undefined;
+
+		return parent[0][Object.keys(parent[0])[0]];
+	}
+
+	public async query(
 		queryString: string,
 		params: any[] = [],
 		returnAffected?: boolean
@@ -121,6 +140,13 @@ export class Database {
 			const resultData = await this.connection.query(
 				this.connection.format(queryString, params)
 			);
+
+			if (this.isDebug) {
+				console.log(
+					'Query:',
+					this.getFormattedQuery(queryString, params)
+				);
+			}
 
 			return resultData?.[0];
 		} catch (e) {

@@ -1,10 +1,12 @@
 import Link from 'next/link';
-import UserControls from './components/UserControls';
+import UserControls from '../components/UserControls';
 import { CSSRuleObject } from 'tailwindcss/types/config';
 import { getServerUser } from '@/lib/auth';
-import { UUID } from 'crypto';
+import { signOut } from 'next-auth/react';
+import { LogoutButton } from '@/components/HelpfulButtons';
 
 export default async function Home() {
+	const user = await getServerUser();
 	const styles: Record<string, CSSRuleObject> = {
 		masterContainer: {
 			display: 'flex',
@@ -49,7 +51,7 @@ export default async function Home() {
 
 				{/* User Controls menu */}
 				<div>
-					<UserControls />
+					<UserControls user={user} />
 				</div>
 			</header>
 			<div style={styles.mainContentContainer}>
@@ -64,14 +66,14 @@ export default async function Home() {
 							</Link>
 						</li>
 						<li>
-							<a>Search for users</a>
+							<Link href='/dashboard/users'>
+								Search for users
+							</Link>
 						</li>
 						<li>
-							<a>Search for groups</a>
+							<Link href='/user/groups'>Search for groups</Link>
 						</li>
-						<li>
-							<a>Log out</a>
-						</li>
+						<LogoutButton />
 					</ul>
 				</div>
 				{/* Main content */}

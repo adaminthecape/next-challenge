@@ -26,31 +26,45 @@ async function apiRequest(
 
 		if (!token) {
 			console.warn(`Token not available! (${method} - ${url})`);
-			return undefined;
+			return { data: undefined, status: 403 };
 		}
+
+		const config = {
+			headers: { Authorization: `Bearer ${token}` },
+		};
+
+		console.log('fetching...', urlToUse);
 
 		let data;
 
-		if (method === 'get') {
-			data = (
-				await axios.get(urlToUse, {
-					headers: { Authorization: `Bearer ${token}` },
-				})
-			)?.data;
-		} else if (method === 'post') {
-			data = (
-				await axios.post(urlToUse, params, {
-					headers: { Authorization: `Bearer ${token}` },
+		try {
+			if (method === 'get') {
+				data = await axios.get(urlToUse, config);
+				// data = await fetch(urlToUse, config);
+			} else if (method === 'post') {
+				data = await axios.post(urlToUse, params, {
+					...config,
 					params,
-				})
-			)?.data;
+				});
+			}
+		} catch (e: any) {
+			console.warn(e);
+
+			return {
+				data: undefined,
+				error: e,
+				status: e.response?.status || 500,
+			};
 		}
 
-		return data;
+		console.log('done fetching', urlToUse, data?.status);
+
+		return { data: data?.data, status: data?.status };
 	} catch (e) {
 		// TODO: add error handling
 		console.warn('Axios ERROR:', e);
-		return undefined;
+
+		return { data: undefined, error: e, status: 500 };
 	}
 }
 

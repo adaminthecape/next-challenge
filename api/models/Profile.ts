@@ -94,13 +94,13 @@ export class Profile {
 		const db = await Database.getInstance(this.req);
 
 		try {
-			const currentData: { json: ProfileData } = (
+			const currentData: { jsonData: ProfileData } = (
 				await db.query1r(
-					`SELECT CAST(\`json\` AS JSON) AS json
+					`SELECT CAST(\`jsonData\` AS JSON) AS jsonData
                     FROM profiles WHERE userId = ?`,
 					[this.userId]
 				)
-			)?.json;
+			)?.jsonData;
 
 			console.log(
 				'User',
@@ -118,7 +118,7 @@ export class Profile {
 
 			await db.update(
 				`UPDATE profiles SET
-                    json = JSON_SET(json, "$", ?),
+                    jsonData = JSON_SET(jsonData, "$", ?),
                     updatedAt = ?
                 WHERE userId = ? LIMIT 1`,
 				[JSON.stringify(newData), Date.now(), this.userId]

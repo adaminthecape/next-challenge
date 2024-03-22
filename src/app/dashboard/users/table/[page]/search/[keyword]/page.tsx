@@ -1,4 +1,4 @@
-import UsersTable from '@/app/components/AdminDashboard/Users/UsersTable';
+import UsersTable from '@/components/AdminDashboard/Users/UsersTable';
 
 export default function UsersTableDisplay({
 	params: { page, keyword },

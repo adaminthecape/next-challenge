@@ -1,4 +1,4 @@
-import PermissionsTable from '@/app/components/AdminDashboard/Permissions/PermissionsTable';
+import PermissionsTable from '@/components/AdminDashboard/Permissions/PermissionsTable';
 
 export default function PermissionsTableDisplay({
 	params: { page },

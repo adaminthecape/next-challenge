@@ -2,6 +2,7 @@ import { UUID } from 'crypto';
 import { IReq } from '../../sharedTypes';
 import { Database } from './Database';
 import { PermissionType, validatePermission } from './Permissions';
+import { handleError } from '../utils';
 
 export interface CommunicationRow {
 	/** Table row id */
@@ -10,8 +11,10 @@ export interface CommunicationRow {
 	scope?: UUID;
 	/** The id of the sender */
 	from: UUID;
+	fromUsername?: string;
 	/** The id of the recipient */
 	to: UUID;
+	toUsername?: string;
 	/** The content of the communication */
 	message: string;
 	/** When the message was sent */
@@ -22,10 +25,12 @@ export interface CommunicationRow {
 
 export class Communications {
 	private req: IReq;
+	private scope: UUID;
 	private userId: UUID;
 
-	constructor(req: IReq, userId: UUID) {
+	constructor(req: IReq, userId: UUID, scope?: UUID) {
 		this.req = req;
+		this.scope = userId;
 		this.userId = userId;
 	}
 
@@ -47,11 +52,13 @@ export class Communications {
 			scope
 		);
 
+		console.log(`User ${this.userId} CAN send to ${scope}`);
+
 		const db = await Database.getInstance(this.req);
 
 		await db.insert(
-			`INSERT INTO communications (
-                scope, from, to, message, createdAt
+			`INSERT INTO \`communications\` (
+                \`scope\`, \`from\`, \`to\`, \`message\`, \`createdAt\`
             ) VALUES (?, ?, ?, ?, ?)`,
 			[scope ?? null, this.userId, recipient, message, Date.now()]
 		);
@@ -62,42 +69,44 @@ export class Communications {
 	 * @param opts
 	 * @returns
 	 */
-	public async getCommunications(opts: {
-		scope: UUID;
-		from?: UUID;
-		to?: UUID;
-		pagination?: {
-			page?: number;
-			limit?: number;
-			offset?: number;
-		};
-	}): Promise<CommunicationRow[]> {
+	public async getCommunications(
+		opts: {
+			scope: UUID;
+			from?: UUID;
+			fromUsername?: string;
+			to?: UUID;
+			toUsername?: string;
+			pagination?: {
+				page?: number;
+				limit?: number;
+				offset?: number;
+			};
+		},
+		countOnly?: boolean
+	): Promise<{
+		communications: CommunicationRow[];
+		total: number;
+		page: number;
+		limit?: number;
+	}> {
 		// Communications must have a scope
 		if (!opts?.scope) {
-			return [];
+			return {
+				communications: [],
+				total: 0,
+				page: 1,
+			};
 		}
 
-		// Validate that the user can read these communications
-		await validatePermission(
-			this.req,
-			this.req.currentUser.userId,
-			PermissionType.COMMUNICATIONS_READ,
-			opts.scope
-		);
-
-		if (!opts.pagination) {
-			opts.pagination = {};
-		}
-
-		if (!opts.pagination.page) {
-			opts.pagination.page = 1;
-		}
-
+		// if (!filters.status) filters.status = LoginStatus.Active;
+		if (!opts.pagination) opts.pagination = {};
+		if (!opts.pagination.page) opts.pagination.page = 1;
 		if (!opts.pagination.limit) {
 			opts.pagination.limit = 10;
+		} else if (typeof opts.pagination.limit === 'string') {
+			opts.pagination.limit = parseInt(opts.pagination.limit, 10);
 		}
-
-		if (typeof opts.pagination.offset !== 'number') {
+		if (!opts.pagination.offset) {
 			opts.pagination.offset =
 				(opts.pagination.page - 1) * opts.pagination.limit;
 		}
@@ -106,16 +115,16 @@ export class Communications {
 		const params: any[] = [];
 
 		// first ensure scope is respected
-		wheres.push('scope = ?');
+		wheres.push('c.`scope` = ?');
 		params.push(opts.scope);
 
 		if (opts.from) {
-			wheres.push('from = ?');
+			wheres.push('c.`from` = ?');
 			params.push(opts.from);
 		}
 
 		if (opts.to) {
-			wheres.push('to = ?');
+			wheres.push('c.`to` = ?');
 			params.push(opts.to);
 		}
 
@@ -124,11 +133,59 @@ export class Communications {
 
 		const db = await Database.getInstance(this.req);
 
-		return db.select(
-			`SELECT * FROM communications WHERE (${wheres.join(
-				' AND '
-			)}) LIMIT ? OFFSET ?`,
+		let total = 0;
+
+		try {
+			const countData = await db.query1(
+				`SELECT COUNT(*) FROM \`communications\` c WHERE ${wheres.join(
+					' AND '
+				)}`,
+				params
+			);
+
+			total = countData || 0;
+		} catch (e) {
+			handleError({
+				message: 'Could not get count for communications.',
+				error: e,
+			});
+		}
+
+		if (countOnly) {
+			return { communications: [], total, page: 1 };
+		}
+
+		console.log('limit:', opts.pagination.limit);
+
+		const communications = await db.select(
+			`SELECT 
+				c.*,
+				l1.username AS fromUsername,
+				l2.username AS toUsername
+			FROM \`communications\` c
+			LEFT JOIN \`logins\` l1 ON l1.userId = c.\`from\`
+			LEFT JOIN \`logins\` l2 ON l2.userId = c.\`to\`
+			WHERE (${wheres.join(' AND ')})
+			LIMIT ? OFFSET ?`,
 			params
 		);
+
+		console.log(
+			communications,
+			db.getFormattedQuery(
+				`SELECT 
+					c.*,
+					l1.username AS fromUsername,
+					l2.username AS toUsername
+				FROM \`communications\` c
+				LEFT JOIN \`logins\` l1 ON l1.userId = c.\`from\`
+				LEFT JOIN \`logins\` l2 ON l2.userId = c.\`to\`
+				WHERE (${wheres.join(' AND ')})
+				LIMIT ? OFFSET ?`,
+				params
+			)
+		);
+
+		return { communications, total, page: 1 };
 	}
 }

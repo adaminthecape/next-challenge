@@ -22,6 +22,7 @@ export enum PermissionType {
 	PERMISSIONS_READ = 'permissions.read',
 	PERMISSIONS_CREATE = 'permissions.create',
 	PERMISSIONS_SUSPEND = 'permissions.suspend',
+	PERMISSIONS_VERIFY = 'permissions.verify',
 	/** Allowed through registration, but registration may be disabled */
 	ACCOUNT_CREATE = 'account.create',
 	/** Admins may be able to see users but not verify them */
@@ -38,6 +39,10 @@ export enum PermissionType {
 	COMMUNICATIONS_UPDATE = 'communications.update',
 	/** Exception: users may delete their own communications */
 	COMMUNICATIONS_DELETE = 'communications.delete',
+	GROUP_CREATE = 'group.create',
+	GROUP_DELETE = 'group.delete',
+	GROUP_UPDATE = 'group.update',
+	GROUP_READ = 'group.read',
 }
 
 export enum PermissionStatus {
@@ -96,6 +101,7 @@ export class UserPermissions {
 			};
 		}
 	): Promise<any> {
+		console.log('getPermissionsList:', filters);
 		if (!filters) filters = {};
 		// if (!filters.status) filters.status = LoginStatus.Active;
 		if (!filters.pagination) filters.pagination = {};
@@ -153,7 +159,7 @@ export class UserPermissions {
 			total = countData?.count || 0;
 		} catch (e) {
 			handleError({
-				message: 'Could not get count for active logins.',
+				message: 'Could not get count for permissions.',
 				error: e,
 			});
 		}
@@ -274,19 +280,26 @@ export class UserPermissions {
 	public async assignPermission(
 		permissionType: PermissionType,
 		userId: UUID,
-		scope?: UUID
+		scope: UUID
 	): Promise<void> {
-		// Validate if the user can insert permissions
-		await this.validate(PermissionType.PERMISSIONS_CREATE, scope);
+		/** Unscoped permissions can only be manually added */
+		if (!scope) {
+			throw new Error('Not allowed!');
+		}
 
 		// Does this permission already exist?
 		const existingPermission = await this.getPermission(
 			permissionType,
-			scope
+			scope,
+			[
+				PermissionStatus.ACTIVE,
+				PermissionStatus.SUSPENDED,
+				PermissionStatus.UNVERIFIED,
+			]
 		);
 
 		if (existingPermission) {
-			throw new Error('Permission already exists!');
+			return;
 		}
 
 		await this.insertPermission({
@@ -297,6 +310,55 @@ export class UserPermissions {
 			createdBy: this.req.currentUser.userId,
 			status: PermissionStatus.UNVERIFIED,
 		});
+
+		console.log(
+			`Permission ${permissionType} assigned to ${userId} for ${scope}`
+		);
+	}
+
+	/**
+	 * UNSAFE - only do this when assigning basic initial permissions
+	 * Assign a given permission to a given user.
+	 * @param permissionType
+	 * @param userId
+	 */
+	public async assignPermissionUnsafe(
+		permissionType: PermissionType,
+		userId: UUID,
+		scope: UUID,
+		status: PermissionStatus
+	): Promise<void> {
+		if (!scope || !userId || !permissionType) {
+			throw new Error('CANNOT GRANT');
+		}
+
+		// Does this permission already exist?
+		const existingPermission = await this.getPermission(
+			permissionType,
+			scope,
+			[
+				PermissionStatus.ACTIVE,
+				PermissionStatus.SUSPENDED,
+				PermissionStatus.UNVERIFIED,
+			]
+		);
+
+		if (existingPermission) {
+			return;
+		}
+
+		await this.insertPermission({
+			permissionType,
+			userId,
+			scope,
+			createdAt: Date.now(),
+			createdBy: this.req.currentUser.userId,
+			status: status || PermissionStatus.UNVERIFIED,
+		});
+
+		console.log(
+			`(UNSAFE) Permission ${permissionType} assigned to ${userId} for ${scope}`
+		);
 	}
 
 	/**
@@ -307,21 +369,48 @@ export class UserPermissions {
 	 * @param userId
 	 * @param scope
 	 */
-	private async verifyPermission(
+	public async verifyPermission(
 		permissionType: PermissionType,
 		userId: UUID,
 		scope?: UUID
 	): Promise<void> {
-		// Validate if the user can suspend permissions
-		await this.validate(PermissionType.PERMISSIONS_CREATE, scope);
+		/** Unscoped permissions can only be manually added */
+		if (!scope) {
+			throw new Error('Not allowed!');
+		}
 
-		const db = await Database.getInstance(this.req);
+		const db = await Database.getInstance(this.req, true);
+
+		console.log(
+			db.getFormattedQuery(
+				`UPDATE permissionsMap SET status = ?, updatedAt = ?, approvedBy = ? WHERE (permissionType = ? AND userId = ? AND scope = ?) LIMIT 1`,
+				[
+					PermissionStatus.ACTIVE,
+					Date.now(),
+					this.req.currentUser?.userId,
+					permissionType,
+					userId,
+					scope,
+				]
+			)
+		);
 
 		await db.update(
-			`UPDATE permissionsMap SET status = ?, updatedAt = ? WHERE (
+			`UPDATE permissionsMap SET
+				status = ?,
+				updatedAt = ?,
+				approvedBy = ?
+			WHERE (
 				permissionType = ? AND userId = ? AND scope = ?
-			)`,
-			[PermissionStatus.ACTIVE, Date.now(), permissionType, userId, scope]
+			) LIMIT 1`,
+			[
+				PermissionStatus.ACTIVE,
+				Date.now(),
+				this.req.currentUser?.userId,
+				permissionType,
+				userId,
+				scope,
+			]
 		);
 	}
 
@@ -338,8 +427,10 @@ export class UserPermissions {
 		userId: UUID,
 		scope?: UUID
 	): Promise<void> {
-		// Validate if the user can suspend permissions
-		await this.validate(PermissionType.PERMISSIONS_SUSPEND, scope);
+		/** Unscoped permissions can only be manually added */
+		if (!scope) {
+			throw new Error('Not allowed!');
+		}
 
 		const db = await Database.getInstance(this.req);
 
@@ -390,11 +481,19 @@ export class UserPermissions {
 		if (scope) {
 			wheres.push('scope = ?');
 			params.push(scope);
+		} else {
+			wheres.push('scope IS NULL');
 		}
 
 		wheres.push('status IN (?)');
 		params.push(!states?.length ? [PermissionStatus.ACTIVE] : states);
 
+		console.log(
+			db.getFormattedQuery(
+				`SELECT * FROM permissionsMap WHERE (${wheres.join(' AND ')})`,
+				params
+			)
+		);
 		const userHasPermission = await db.query1r(
 			`SELECT * FROM permissionsMap WHERE (${wheres.join(' AND ')})`,
 			params
@@ -410,18 +509,44 @@ export class UserPermissions {
 		const usersPermission = await this.getPermission(permissionType, scope);
 
 		if (
-			!(
-				usersPermission?.userId === this.userId &&
-				usersPermission?.permissionType === permissionType &&
-				usersPermission.status === PermissionStatus.ACTIVE &&
-				((!scope && !usersPermission.scope) ||
-					usersPermission?.scope === scope)
-			)
+			!usersPermission
+			// !usersPermission ||
+			// !(
+			// 	usersPermission?.userId === this.userId &&
+			// 	usersPermission?.permissionType === permissionType &&
+			// 	usersPermission?.status === PermissionStatus.ACTIVE &&
+			// 	((!scope && !usersPermission?.scope) ||
+			// 		usersPermission?.scope === scope)
+			// )
 		) {
-			throw new Error('Not allowed!');
+			throw new Error(`Not allowed! ${permissionType} on ${scope}`);
 		}
 
 		return true;
+	}
+
+	public async validateMultiple(
+		permissionTypes: PermissionType[],
+		scope?: UUID
+	): Promise<any> {
+		const resultMap: Partial<Record<PermissionType, boolean>> = {};
+
+		for await (const permissionType of permissionTypes) {
+			try {
+				if (await this.validate(permissionType, scope)) {
+					resultMap[permissionType] = true;
+				}
+			} catch (e) {
+				resultMap[permissionType] = false;
+			}
+		}
+
+		return {
+			results: resultMap,
+			success: Object.values(resultMap).every(
+				(result) => result === true
+			),
+		};
 	}
 }
 

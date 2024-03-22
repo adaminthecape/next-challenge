@@ -11,6 +11,11 @@ import { SessionManager } from './models/Session';
 import { UUID } from 'crypto';
 import { Database } from './models/Database';
 import groups from './routes/groups';
+import { handleError } from './utils';
+import communications from './routes/communications';
+
+import { Server } from 'socket.io';
+import http from 'http';
 
 configureEnv();
 
@@ -41,34 +46,57 @@ export async function setUserInReq(
 	res: IRes,
 	next: any
 ): Promise<any> {
-	// Decode the JWT, get the user's id, and add it to the req
-	const { authorization } = req.headers;
+	try {
+		// Decode the JWT, get the user's id, and add it to the req
+		const { authorization } = req.headers;
 
-	if (!authorization) {
-		console.log('before fail:');
+		if (!authorization) {
+			// realtime chat - needs jwt for real data
+			if (req.url?.startsWith('/socket.io/')) {
+				return next();
+			}
+			console.log(
+				'before fail:',
+				authorization,
+				req.url,
+				req.params,
+				req.query,
+				req.body
+			);
 
-		return res.sendStatus(403);
-	}
-
-	const userData = decodeJWT(authorization || '');
-
-	if (!userData) {
-		return res.sendStatus(403);
-	}
-
-	req.currentUser = { userId: userData.userId };
-	await new SessionManager(req, req.currentUser.userId).validateUserSession();
-
-	// Release the db connection, if any
-	res.on('finish', async () => {
-		if (req.db instanceof Database) {
-			await req.db.release();
+			return res.sendStatus(403);
 		}
-	});
 
-	console.log('Authenticated for route:', req.url);
+		const userData = decodeJWT(authorization || '');
 
-	next();
+		if (!userData) {
+			return res.sendStatus(403);
+		}
+
+		req.currentUser = { userId: userData.userId };
+		await new SessionManager(
+			req,
+			req.currentUser.userId
+		).validateUserSession();
+
+		// Release the db connection, if any
+		res.on('finish', async () => {
+			if (req.db instanceof Database) {
+				await req.db.release();
+			}
+		});
+
+		console.log('Authenticated for route:', req.url);
+
+		next();
+	} catch (e) {
+		handleError({
+			message: 'Could not pre-validate user',
+			error: e,
+		});
+
+		return res.sendStatus(500);
+	}
 }
 
 app.use('/permission', permission);
@@ -76,6 +104,7 @@ app.use('/session', session);
 app.use('/login', login);
 app.use('/user', user);
 app.use('/groups', groups);
+app.use('/communications', communications);
 
 app.use(
 	cors({
@@ -96,6 +125,34 @@ app.post('/test/test', async (req: IReq, res: IRes) => {
 
 	return res.sendStatus(200);
 });
+
+// WEBSOCKETS - FOR CHAT
+// const server = http.createServer((req: any, res: any) => {});
+// const io = new Server(server, {
+// 	transports: ['websocket', 'polling'],
+// 	cors: {
+// 		origin: process.env.UI_ORIGIN_URL,
+// 		methods: ['GET', 'POST'],
+// 		credentials: true,
+// 	},
+// });
+
+// io.on('connection', (socket) => {
+// 	console.log('A user connected');
+
+// 	socket.on('message', (message) => {
+// 		io.emit('message', message);
+// 		console.log('MESSAGE:', message, socket.data);
+// 	});
+
+// 	socket.on('disconnect', () => {
+// 		console.log('A user disconnected');
+// 	});
+// });
+// const ioPort = 4001;
+// server.listen(ioPort, () => {
+// 	console.log('WebSocket server listening on port ' + ioPort);
+// });
 
 app.listen(port, () => {
 	console.log(`ppm-challenge-api listening on port ${port}`);

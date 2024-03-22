@@ -2,7 +2,12 @@ import express from 'express';
 import cors from 'cors';
 import { config as configureEnv } from 'dotenv';
 import { setUserInReq } from '../app';
-import { addGroup, getPageOfGroups } from '../controllers/groups';
+import {
+	addGroup,
+	getPageOfGroups,
+	getSingleGroupData,
+	joinGroup,
+} from '../controllers/groups';
 
 const groups = express.Router();
 
@@ -18,5 +23,7 @@ groups.use(setUserInReq);
 
 groups.post('/list', getPageOfGroups);
 groups.post('/add', addGroup);
+groups.get('/join/:groupId', joinGroup);
+groups.get('/single/:groupId', getSingleGroupData);
 
 export default groups;

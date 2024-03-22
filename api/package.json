@@ -25,6 +25,9 @@
 		"mysql": "^2.18.1",
 		"mysql2": "^3.9.2",
 		"odbc": "^2.4.8",
+		"p-iteration": "^1.1.8",
+		"socket.io": "^4.7.5",
+		"socket.io-client": "^4.7.5",
 		"ts-node": "^10.9.2"
 	},
 	"devDependencies": {

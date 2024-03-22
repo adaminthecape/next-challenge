@@ -4,10 +4,9 @@
 import * as React from 'react';
 import Link from 'next/link';
 
-import UserControls from '../components/UserControls';
+import UserControls from '../../components/UserControls';
 import { CSSRuleObject } from 'tailwindcss/types/config';
-import { UUID } from 'crypto';
-import { getServerUser } from '@/lib/auth';
+import { getServerUser, validateServerUser } from '@/lib/auth';
 
 const styles: Record<string, CSSRuleObject> = {
 	masterContainer: {
@@ -50,6 +49,7 @@ export default async function UserView({
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
+	await validateServerUser();
 	const user = await getServerUser();
 
 	return (
