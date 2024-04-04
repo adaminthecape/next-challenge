@@ -12,12 +12,15 @@ import {
 } from '../../../../../api/models/Permissions';
 import PermissionsTable from '@/components/AdminDashboard/Permissions/PermissionsTable';
 import Link from 'next/link';
+import GroupCommunications from '@/components/Groups/GroupCommunications';
+import ShowUsersModal from '@/components/Groups/ViewUsersModal';
 
 export default async function ViewGroup({
 	params: { groupId },
 }: {
 	params: { groupId: UUID };
 }) {
+	let renderKey = 0;
 	const user = (await getServerUser()) || {
 		userId: undefined,
 		jwt: undefined,
@@ -27,27 +30,25 @@ export default async function ViewGroup({
 		jwt: user?.jwt,
 	});
 
-	let { data: communications } = await post(
-		`/communications/messages`,
-		{
-			scope: groupId,
-			pagination: {
-				page: 1,
-				limit: 20,
-			},
-		},
-		{
-			jwt: user?.jwt,
-		}
-	);
+	// const { data: roleData } = await get(`/groups/members/${groupId}/USER`, {
+	// 	jwt: user?.jwt,
+	// });
 
-	if (!communications) communications = { communications: [], total: 0 };
+	// let { data: communications, status: communicationsStatus } = await post(
+	// 	`/communications/messages`,
+	// 	{
+	// 		scope: groupId,
+	// 		pagination: {
+	// 			page: 1,
+	// 			limit: 20,
+	// 		},
+	// 	},
+	// 	{
+	// 		jwt: user?.jwt,
+	// 	}
+	// );
 
-	console.log('communications:', communications);
-
-	if (data?.visibleRoles) {
-		console.log('Group has roles:', data.visibleRoles);
-	}
+	// if (!communications) communications = { communications: [], total: 0 };
 
 	if (!data) {
 		return <div>No data!</div>;
@@ -62,6 +63,7 @@ export default async function ViewGroup({
 				PermissionType.PERMISSIONS_VERIFY,
 				PermissionType.PERMISSIONS_SUSPEND,
 			],
+			scope: groupId,
 		},
 		{
 			jwt: user?.jwt,
@@ -90,8 +92,6 @@ export default async function ViewGroup({
 
 	const role = getUsersRoleOnGroup();
 
-	console.log({ role });
-
 	const canSeePermissionsTable =
 		role === GroupRoleType.ADMIN &&
 		permissionPermissions[PermissionType.PERMISSIONS_READ] &&
@@ -99,7 +99,7 @@ export default async function ViewGroup({
 			permissionPermissions[PermissionType.PERMISSIONS_VERIFY]);
 
 	return (
-		<div>
+		<div key={renderKey}>
 			<div style={{ display: 'flex', flexDirection: 'row' }}>
 				<div>
 					<div>
@@ -114,71 +114,26 @@ export default async function ViewGroup({
 				</div>
 				<div style={{ flexGrow: 1 }}></div>
 				<div>
-					{!role ? (
+					{role ? (
+						<ShowUsersModal
+							groupId={groupId}
+							usersOnGroup={data.visibleRoles}
+							usersRoleOnGroup={role}
+						/>
+					) : (
 						<Link href={`/user/groups/${groupId}/join`}>
 							<button className='btn btn-warning'>
 								Not a member! Click to join
 							</button>
 						</Link>
-					) : (
-						''
-					)}
-					{role === GroupRoleType.ADMIN ? (
-						<button className='btn btn-success'>{role}</button>
-					) : (
-						''
-					)}
-					{role === GroupRoleType.MOD ? (
-						<button className='btn btn-warning'>{role}</button>
-					) : (
-						''
-					)}
-					{role === GroupRoleType.USER ? (
-						<button className='btn'>{role}</button>
-					) : (
-						''
 					)}
 				</div>
 			</div>
-			{communications.total ? (
-				<div
-					className='mt-4 mb-4'
-					style={{
-						maxHeight: '50vh',
-						overflowX: 'hidden',
-						overflowY: 'scroll',
-					}}
-				>
-					{communications.communications.map((comm: any) => (
-						<div
-							key={`communication-${comm.id}`}
-							className='mb-2'
-						>
-							<div
-								role='alert'
-								className='alert shadow-lg'
-							>
-								<MessageCircle />
-								<div>
-									<h3 className='font-bold'>
-										{comm.fromUsername}
-										{comm.toUsername
-											? ` -> ${comm.toUsername}`
-											: ''}
-									</h3>
-									<div className='text-sm'>
-										{comm.message}
-									</div>
-								</div>
-								<button className='btn btn-sm'>See</button>
-							</div>
-						</div>
-					))}
-				</div>
-			) : (
-				''
-			)}
-			<SendMessage scope={groupId} />
+			<GroupCommunications groupId={groupId} />
+			<SendMessage
+				scope={groupId}
+				userId={user.userId}
+			/>
 			{data.hasSubgroups ? (
 				<div className='mt-4'>
 					<GroupsTable

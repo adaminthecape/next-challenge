@@ -7,6 +7,31 @@ import SingleGroup from './GroupsRow';
 import AddGroupDialog from './AddGroupDialog';
 import { UUID } from 'crypto';
 
+const styles: Record<string, CSSRuleObject> = {
+	tableTopBar: {
+		width: '100%',
+		height: '60px',
+		display: 'flex',
+		flexDirection: 'row',
+		justifyContent: 'space-between',
+		padding: '6px 8px',
+	},
+	tableBody: {
+		maxHeight: 'calc(100% - 200px)',
+	},
+	paginationRow: {
+		display: 'flex',
+		flexDirection: 'row',
+		justifyContent: 'center',
+		alignItems: 'center',
+	},
+	groupList: {
+		display: 'flex',
+		flexDirection: 'row',
+		flexWrap: 'wrap',
+	},
+};
+
 export default async function GroupsTable({
 	searchParams,
 	hideTopBar,
@@ -32,6 +57,7 @@ export default async function GroupsTable({
 			page: page || 1,
 			limit: limit || 6,
 		},
+		status: ['public'],
 	};
 
 	const session = await getServerUser();
@@ -39,31 +65,6 @@ export default async function GroupsTable({
 		(await post(`/groups/list`, params, {
 			jwt: session?.jwt,
 		})) || {};
-
-	const styles: Record<string, CSSRuleObject> = {
-		tableTopBar: {
-			width: '100%',
-			height: '60px',
-			display: 'flex',
-			flexDirection: 'row',
-			justifyContent: 'space-between',
-			padding: '6px 8px',
-		},
-		tableBody: {
-			maxHeight: 'calc(100% - 200px)',
-		},
-		paginationRow: {
-			display: 'flex',
-			flexDirection: 'row',
-			justifyContent: 'center',
-			alignItems: 'center',
-		},
-		groupList: {
-			display: 'flex',
-			flexDirection: 'row',
-			flexWrap: 'wrap',
-		},
-	};
 
 	/**
 	 * Obviously in production this would kick the user out and/or send
@@ -78,7 +79,7 @@ export default async function GroupsTable({
 				You must be a member of the group to see its subgroups.
 			</div>
 		);
-	else if (!data) return <div>No records found.</div>;
+	else if (!data) return <div>No groups found.</div>;
 
 	return (
 		<div>
@@ -105,10 +106,13 @@ export default async function GroupsTable({
 				<div style={styles.groupList}>
 					{(data.groups || []).map((item: any) => {
 						return (
-							<SingleGroup
-								group={item}
-								key={`group-row-${item.id}`}
-							/>
+							<div>
+								<SingleGroup
+									group={item}
+									key={`group-row-${item.id}`}
+								/>
+								{/* <pre>{JSON.stringify(item, undefined, 2)}</pre> */}
+							</div>
 						);
 					})}
 				</div>

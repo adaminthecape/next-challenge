@@ -61,6 +61,8 @@ export async function authenticateUser(req: IReq, res: IRes): Promise<IRes> {
 
 		await sessions.refreshSession();
 
+		res.setHeader('Set-Cookie', [`jwt=${token}`]);
+
 		return res
 			.status(200)
 			.json({ token, id: storedLogin.userId, name: username });
@@ -115,8 +117,6 @@ export async function getActiveLogins(req: IReq, res: IRes): Promise<IRes> {
 		return res.sendStatus(403);
 	}
 
-	console.log('controller:', req.query);
-
 	try {
 		const data = await LoginManager.getLogins(req, req.query);
 
@@ -156,9 +156,8 @@ export async function updateLoginState(req: IReq, res: IRes): Promise<IRes> {
 			return res.sendStatus(500);
 		}
 
-		const logins = new LoginManager(req, userId as UUID);
-
-		const success = await logins.changeLoginStatus(
+		const success = await LoginManager.changeLoginStatus(
+			req,
 			userId,
 			parseInt(newState, 10)
 		);

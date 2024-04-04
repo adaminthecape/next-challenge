@@ -35,7 +35,7 @@ export class Communications {
 	}
 
 	public async addCommunication(
-		recipient: UUID,
+		recipient: UUID | undefined,
 		message: string,
 		scope?: UUID
 	): Promise<void> {
@@ -44,23 +44,13 @@ export class Communications {
 			return;
 		}
 
-		// Validate that the user can communicate with the target user
-		await validatePermission(
-			this.req,
-			this.req.currentUser.userId,
-			PermissionType.COMMUNICATIONS_CREATE,
-			scope
-		);
-
-		console.log(`User ${this.userId} CAN send to ${scope}`);
-
 		const db = await Database.getInstance(this.req);
 
 		await db.insert(
 			`INSERT INTO \`communications\` (
                 \`scope\`, \`from\`, \`to\`, \`message\`, \`createdAt\`
             ) VALUES (?, ?, ?, ?, ?)`,
-			[scope ?? null, this.userId, recipient, message, Date.now()]
+			[scope ?? null, this.userId, recipient || null, message, Date.now()]
 		);
 	}
 

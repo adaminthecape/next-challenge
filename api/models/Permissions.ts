@@ -69,11 +69,8 @@ export interface PermissionMapRow {
 }
 
 export const cSelfManageablePermissions = [
-	PermissionType.ACCOUNT_VIEW,
-	PermissionType.COMMUNICATIONS_READ,
 	PermissionType.PERMISSIONS_READ,
 	PermissionType.PERMISSIONS_SUSPEND,
-	PermissionType.PROFILE_VIEW,
 ];
 // The permission assignments on the system can be defined by super admins.
 // The permission *types* must be directly referenced in code, and cannot
@@ -109,7 +106,6 @@ export class UserPermissions {
 			};
 		}
 	): Promise<any> {
-		console.log('getPermissionsList:', filters);
 		if (!filters) filters = {};
 		// if (!filters.status) filters.status = LoginStatus.Active;
 		if (!filters.pagination) filters.pagination = {};
@@ -289,7 +285,8 @@ export class UserPermissions {
 	public async assignPermission(
 		permissionType: PermissionType,
 		userId: UUID,
-		scope: UUID
+		scope: UUID,
+		andLog?: boolean
 	): Promise<void> {
 		/** Unscoped permissions can only be manually added */
 		if (!scope) {
@@ -320,9 +317,11 @@ export class UserPermissions {
 			status: PermissionStatus.UNVERIFIED,
 		});
 
-		console.log(
-			`Permission ${permissionType} assigned to ${userId} for ${scope}`
-		);
+		if (andLog) {
+			console.log(
+				`Permission ${permissionType} assigned to ${userId} for ${scope}`
+			);
+		}
 	}
 
 	/**
@@ -390,20 +389,6 @@ export class UserPermissions {
 
 		const db = await Database.getInstance(this.req, true);
 
-		console.log(
-			db.getFormattedQuery(
-				`UPDATE permissionsMap SET status = ?, updatedAt = ?, approvedBy = ? WHERE (permissionType = ? AND userId = ? AND scope = ?) LIMIT 1`,
-				[
-					PermissionStatus.ACTIVE,
-					Date.now(),
-					this.req.currentUser?.userId,
-					permissionType,
-					userId,
-					scope,
-				]
-			)
-		);
-
 		await db.update(
 			`UPDATE permissionsMap SET
 				status = ?,
@@ -431,7 +416,7 @@ export class UserPermissions {
 	 * @param userId
 	 * @param scope
 	 */
-	private async suspendPermission(
+	public async suspendPermission(
 		permissionType: PermissionType,
 		userId: UUID,
 		scope?: UUID
@@ -444,8 +429,8 @@ export class UserPermissions {
 		const db = await Database.getInstance(this.req);
 
 		await db.update(
-			`UPDATE permissionsMap SET status = ?, updatedAt = ? WHERE (
-				permissionType = ? AND userId = ? AND scope = ?
+			`UPDATE permissionsMap SET \`status\` = ?, updatedAt = ? WHERE (
+				permissionType = ? AND userId = ? AND \`scope\` = ?
 			)`,
 			[
 				PermissionStatus.SUSPENDED,
@@ -498,12 +483,6 @@ export class UserPermissions {
 		wheres.push('status IN (?)');
 		params.push(!states?.length ? [PermissionStatus.ACTIVE] : states);
 
-		console.log(
-			db.getFormattedQuery(
-				`SELECT * FROM permissionsMap WHERE (${wheres.join(' AND ')})`,
-				params
-			)
-		);
 		const userHasPermission = await db.query1r(
 			`SELECT * FROM permissionsMap WHERE (${wheres.join(' AND ')})`,
 			params
@@ -517,12 +496,18 @@ export class UserPermissions {
 		scope?: UUID
 	): Promise<boolean> {
 		if (
+			scope &&
 			this.userId &&
 			this.req.currentUser.userId &&
 			this.userId === this.req.currentUser.userId &&
+			this.userId === scope &&
 			permissionType &&
 			cSelfManageablePermissions.includes(permissionType)
 		) {
+			console.log(
+				`User ${this.userId} managing OWN permission ${permissionType} on ${scope}`
+			);
+
 			// users can do some things to themselves
 			return true;
 		}
@@ -546,13 +531,17 @@ export class UserPermissions {
 				undefined
 			);
 
-			console.log(`Super admin for ${permissionType}`);
-
 			if (superAdminPermission) {
+				console.log(
+					`${this.userId} is super admin for ${permissionType}`
+				);
+
 				return true;
 			}
 
-			throw new Error(`Not allowed! ${permissionType} on ${scope}`);
+			throw new Error(
+				`Not allowed! ${this.userId} for ${permissionType} on ${scope}`
+			);
 		}
 
 		return true;

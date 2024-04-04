@@ -7,6 +7,9 @@ import Link from 'next/link';
 import UserControls from '../../components/UserControls';
 import { CSSRuleObject } from 'tailwindcss/types/config';
 import { getServerUser, validateServerUser } from '@/lib/auth';
+import Image from 'next/image';
+import { signOut } from 'next-auth/react';
+import { LogoutButton } from '@/components/HelpfulButtons';
 
 const styles: Record<string, CSSRuleObject> = {
 	masterContainer: {
@@ -20,7 +23,7 @@ const styles: Record<string, CSSRuleObject> = {
 		flexDirection: 'row',
 		alignItems: 'center',
 		justifyContent: 'space-between',
-		background: 'rgba(25, 25, 250, 0.2)',
+		background: 'rgba(250, 25, 250, 0.10)',
 	},
 	leftDrawerMenu: {
 		height: '100%',
@@ -58,7 +61,15 @@ export default async function UserView({
 			{/* Header */}
 			<header style={styles.topBar}>
 				{/* Logo */}
-				<div>Logo</div>
+				<div>
+					<img
+						src='https://imgur.com/YEusnPd.png'
+						alt='logo'
+						width='140'
+						height='80'
+						className='ml-4'
+					/>
+				</div>
 
 				{/* User Controls menu */}
 				<div>
@@ -82,16 +93,16 @@ export default async function UserView({
 						<li>
 							<Link href='/user/groups/list/1'>View groups</Link>
 						</li>
-						<li>
+						{/* <li>
 							<Link href='/user/profile/list/1'>View users</Link>
 						</li>
 						<li>
 							<Link href='/user/chats/list'>
 								View recent chats
 							</Link>
-						</li>
+						</li> */}
 						<li>
-							<a>Log out</a>
+							<LogoutButton />
 						</li>
 					</ul>
 				</div>

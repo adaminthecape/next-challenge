@@ -103,8 +103,6 @@ export async function validatePermissions(req: IReq, res: IRes): Promise<IRes> {
 			}
 		}
 
-		console.log({ map });
-
 		return res.status(200).json(map);
 	} catch (e) {
 		handleError({

@@ -50,7 +50,7 @@ export class Profile {
 		const db = await Database.getInstance(this.req);
 
 		await db.insert(
-			`INSERT INTO profiles (userId, updatedAt, json)
+			`INSERT INTO profiles (userId, updatedAt, jsonData)
             VALUES (?, ?, JSON_OBJECT())`,
 			[this.userId, Date.now()]
 		);

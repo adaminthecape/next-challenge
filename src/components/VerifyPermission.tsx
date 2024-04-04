@@ -24,6 +24,8 @@ export default function VerifyPermission({
 
 		if (data.status === 200) {
 			toast.success('Verified successfully');
+		} else if (data.status === 403) {
+			toast.error('You are not allowed to do that!');
 		} else {
 			toast.error('Failed to verify!');
 		}
@@ -41,7 +43,7 @@ export default function VerifyPermission({
 		}
 
 		if (success) {
-			redirect(parentRoute || '/dashboard/permissions/1');
+			// redirect(parentRoute || '/dashboard/permissions/1');
 		} else {
 			alert('Failed to verify user');
 		}

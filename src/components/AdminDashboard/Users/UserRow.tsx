@@ -21,7 +21,7 @@ export default function UserRow({
 	};
 
 	return (
-		<tr key={`row-${user.userId}`}>
+		<tr key={`row-${user?.userId}`}>
 			<th>
 				<label>
 					<input
@@ -36,7 +36,7 @@ export default function UserRow({
 						<div className='mask mask-squircle w-12 h-12'>
 							<Avatar
 								size={40}
-								name={user.userId}
+								name={user?.userId}
 								variant='marble'
 								colors={[
 									'#92A1C6',

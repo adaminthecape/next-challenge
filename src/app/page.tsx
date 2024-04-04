@@ -19,7 +19,7 @@ export default async function Home() {
 			flexDirection: 'row',
 			alignItems: 'center',
 			justifyContent: 'space-between',
-			background: 'rgba(25, 25, 250, 0.2)',
+			background: 'rgba(250, 25, 250, 0.10)',
 		},
 		leftDrawerMenu: {
 			height: '100%',
@@ -47,7 +47,15 @@ export default async function Home() {
 			{/* Header */}
 			<header style={styles.topBar}>
 				{/* Logo */}
-				<div>Logo</div>
+				<div>
+					<img
+						src='https://imgur.com/YEusnPd.png'
+						alt='logo'
+						width='140'
+						height='80'
+						className='ml-4'
+					/>
+				</div>
 
 				{/* User Controls menu */}
 				<div>

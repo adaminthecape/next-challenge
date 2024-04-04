@@ -136,7 +136,7 @@ export default async function PermissionsTable({
 						}
 						baseRoute='/dashboard/permissions/table/[page]/[scope]/[username]'
 						pageParam='page'
-						routeParams={{ username }}
+						routeParams={{ username, scope }}
 						replaceMap={{ username: '/', scope: '/any' }}
 					/>
 				</div>

@@ -8,6 +8,7 @@ import {
 	updateLoginState,
 } from '../controllers/login';
 import { setUserInReq } from '../app';
+import { testCreateUsers } from '../controllers/dev';
 
 const login = express.Router();
 

@@ -49,6 +49,7 @@ const MOD = [
 	PermissionType.COMMUNICATIONS_DELETE,
 	PermissionType.COMMUNICATIONS_UPDATE,
 	PermissionType.PERMISSIONS_SUSPEND,
+	PermissionType.PERMISSIONS_READ,
 ];
 const ADMIN = [
 	PermissionType.GROUP_CREATE,
@@ -68,7 +69,7 @@ export const cGroupRoles = {
 };
 
 export type GroupMemberCountRow = {
-	count: number;
+	count?: number;
 	username: string;
 	userId: UUID;
 };
@@ -78,7 +79,7 @@ export class Groups {
 		req: IReq,
 		filters: {
 			approvalType?: GroupApprovalType;
-			status?: GroupStatus;
+			status?: GroupStatus[];
 			userId?: UUID;
 			groupId?: UUID;
 			scope?: UUID | 'any';
@@ -89,6 +90,7 @@ export class Groups {
 				limit?: number;
 				offset?: number;
 			};
+			userIsNotMember?: boolean;
 		},
 		/** Only return the count & avoid expensive data fetching */
 		countOnly?: boolean
@@ -106,13 +108,12 @@ export class Groups {
 		const wheres: string[] = [];
 		const params: any[] = [];
 
-		if (filters.status && GroupStatus[filters.status]) {
-			wheres.push('g.`status` = ?');
-			params.push(
-				typeof filters.status === 'number'
-					? filters.status
-					: parseInt(filters.status, 10)
-			);
+		if (Array.isArray(filters.status) && filters.status.length) {
+			wheres.push('g.`status` IN (?)');
+			params.push(filters.status);
+		} else {
+			wheres.push('g.`status` IN (?)');
+			params.push([GroupStatus.public]);
 		}
 
 		if (filters.userId) {
@@ -182,17 +183,36 @@ export class Groups {
 			return { groups: [], total };
 		}
 
+		const userGroupRoleList = cGroupRoles.USER.map((x) => `'${x}'`).join(
+			', '
+		);
+
 		const groups: GroupRow[] = await db.select(
 			`SELECT 
 				g.*,
 				l.username AS createdByName,
 				(
-					SELECT g2.name FROM \`groups\` g2
+					SELECT g2.name
+					FROM \`groups\` g2
 					WHERE g2.groupId = g.scope LIMIT 1
-				) AS parentName
+				) AS parentName,
+				(
+					SELECT COUNT(DISTINCT userId)
+					FROM permissionsMap p
+					WHERE p.\`scope\` = g.groupId
+					AND p.\`status\` = '${PermissionStatus.ACTIVE}'
+				) AS numMembers,
+				(
+					SELECT COUNT(DISTINCT permissionType)
+					FROM permissionsMap p
+					WHERE p.\`scope\` = g.groupId
+					AND p.userId = '${req.currentUser.userId}'
+					AND p.\`status\` = '${PermissionStatus.ACTIVE}'
+					AND permissionType IN (${userGroupRoleList})
+				) AS numPermissions
 			FROM \`groups\` g
 			JOIN \`logins\` l ON l.userId = g.createdBy
-			WHERE ${wheres.join(' AND ')}
+			WHERE (${wheres.join(' AND ')})
 			LIMIT ? OFFSET ?`,
 			params
 		);
@@ -228,9 +248,9 @@ export class Groups {
 			data.jsonData ? JSON.stringify(data.jsonData) : '{}',
 		];
 
-		const db = await Database.getInstance(req);
+		console.log(params);
 
-		console.log('ADD GROUP:', await db.getFormattedQuery(sql, params));
+		const db = await Database.getInstance(req);
 
 		await db.insert(sql, params);
 
@@ -326,23 +346,29 @@ export class Groups {
 	 * Add a user to the group.
 	 * @returns Whether the user was successfully added.
 	 */
-	public async requestMembership(userId: UUID): Promise<boolean> {
+	public async requestMembership(
+		userId: UUID,
+		roleType: GroupRoleType = GroupRoleType.USER
+	): Promise<boolean> {
 		if (!userId || !this.groupId) return false;
 
-		return this.requestRole(userId, GroupRoleType.USER);
+		return this.assignRole(userId, roleType);
 	}
 
 	/**
 	 * Add a user to the group.
 	 * @returns Whether the user was successfully added.
 	 */
-	public async confirmMembership(userId: UUID): Promise<boolean> {
+	public async confirmMembership(
+		userId: UUID,
+		roleType: GroupRoleType = GroupRoleType.USER
+	): Promise<boolean> {
 		if (!userId || !this.groupId) return false;
 
-		return this.assignRole(userId, GroupRoleType.USER);
+		return this.verifyRole(userId, roleType);
 	}
 
-	public async requestRole(
+	private async assignRole(
 		userId: UUID,
 		role: GroupRoleType
 	): Promise<boolean> {
@@ -360,7 +386,7 @@ export class Groups {
 		return true;
 	}
 
-	public async assignRole(
+	private async verifyRole(
 		userId: UUID,
 		role: GroupRoleType
 	): Promise<boolean> {
@@ -395,7 +421,7 @@ export class Groups {
 
 		// Find all users who have at least as many GRANTED permissions on the
 		// group,
-		return db.select(
+		const results = await db.select(
 			`SELECT 
 				COUNT(p.permissionType) AS count,
 				l.username,
@@ -407,5 +433,120 @@ export class Groups {
 			HAVING count >= ?`,
 			[roles, PermissionStatus.ACTIVE, this.groupId, roles.length]
 		);
+
+		return results?.map((row: GroupMemberCountRow) => ({
+			username: row.username,
+			userId: row.userId,
+		}));
+	}
+
+	public async getParentGroups() {
+		// 		const sql = `SELECT T2.id, T2.groupId
+		// FROM (
+		//     SELECT
+		//         @r AS _id,
+		//         (SELECT @r := scope FROM \`groups\` WHERE groupId = _id) AS parentId,
+		//         @l := @l + 1 AS lvl
+		//     FROM
+		//         (SELECT @r := (SELECT scope FROM \`groups\` WHERE groupId = ?), @l := 0) vars,
+		//         \`groups\` h
+		//     WHERE @r <> 0) T1
+		// JOIN \`groups\` T2
+		// ON T1.lvl = T2.id
+		// ORDER BY T1.lvl DESC`;
+		const sql = `SELECT T2.groupId,T3.scope,T3.groupId
+    FROM (
+        SELECT
+            @r AS _id,
+            @p := @r AS previous,
+            (SELECT @r := scope FROM \`groups\` WHERE groupId = _id AND scope = ?) AS parent_id,
+            @l := @l + 1 AS lvl
+        FROM
+            (SELECT @r := 8, @p := 0, @l := 0) vars,
+            \`groups\` h
+        WHERE @r <> 0 AND @r <> @p) T1
+    JOIN \`groups\` T2 ON T1._id = T2.groupId AND T2.scope = ?
+    LEFT JOIN \`groups\` T3 ON T3.groupId = T2.groupId
+    ORDER BY T1.lvl DESC`;
+
+		const db = await Database.getInstance(this.req);
+
+		const results = await db.select(sql, [this.groupId, this.groupId]);
+	}
+
+	public async getScopeParents(groupId?: UUID): Promise<{
+		parent: UUID | null;
+		grandparent: UUID | null;
+	}> {
+		const db = await Database.getInstance(this.req);
+
+		return (
+			(await db.query1r(
+				`SELECT 
+				groupId AS parent, scope AS grandparent
+			FROM \`groups\`
+			WHERE groupId = (SELECT scope FROM \`groups\` WHERE groupId = ?)`,
+				[groupId || this.groupId]
+			)) || {}
+		);
+	}
+
+	public async getAllScopeParents(): Promise<UUID[]> {
+		const getMore = async (startingId: UUID): Promise<boolean> => {
+			const { parent, grandparent } = await this.getScopeParents(
+				startingId
+			);
+			let added = false;
+
+			if (parent) {
+				if (!allParents.includes(parent)) {
+					allParents.push(parent);
+					added = true;
+				}
+			}
+
+			if (grandparent) {
+				if (!allParents.includes(grandparent)) {
+					allParents.push(grandparent);
+					added = true;
+				}
+			}
+
+			return added;
+		};
+
+		const allParents: UUID[] = [];
+		let hasMore = true;
+
+		while (hasMore) {
+			hasMore = await getMore(
+				allParents[allParents.length - 1] || this.groupId
+			);
+		}
+
+		return allParents;
+	}
+
+	public async validatePermissionsForAllParentScopes(
+		permissionTypes: PermissionType[]
+	): Promise<any> {
+		// get all the parent ids & this group id
+		// find all users who have all the given permissions in any of the given scopes
+		const { userId } = this.req.currentUser;
+		const scopes = [this.groupId, ...(await this.getAllScopeParents())];
+		const map: Record<UUID, boolean> = {};
+
+		const permissionHandler = new UserPermissions(this.req, userId);
+
+		for await (const scope of scopes) {
+			const { success } = await permissionHandler.validateMultiple(
+				permissionTypes,
+				scope
+			);
+
+			map[scope] = success;
+		}
+
+		return map;
 	}
 }

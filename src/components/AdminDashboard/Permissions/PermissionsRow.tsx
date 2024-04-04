@@ -89,8 +89,8 @@ export default function PermissionsRow({
 				</span>
 			</td>
 			<th>
-				<Link href={`/dashboard/users/${permission.userId}`}>
-					<button className='btn btn-ghost btn-xs'>details</button>
+				<Link href={`/user/groups/${permission.scope}`}>
+					<button className='btn btn-ghost btn-xs'>View</button>
 				</Link>
 			</th>
 		</tr>

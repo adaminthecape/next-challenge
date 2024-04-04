@@ -26,12 +26,14 @@ export const authOptions: NextAuthOptions = {
 				},
 			},
 			async authorize(credentials) {
-				const authResult = await login(
+				const authResult: any = await login(
 					credentials?.email as string,
 					credentials?.password as string
 				);
 
 				if (authResult?.token) {
+					cookies().set('client-jwt', authResult.token);
+
 					return {
 						id: authResult.id,
 						name: authResult.name,
@@ -45,6 +47,15 @@ export const authOptions: NextAuthOptions = {
 		}),
 	],
 	callbacks: {
+		// async signIn({ user, account, profile, email, credentials }) {
+		// 	redirect(`/portal/login/${(user as any).token}`);
+		// },
+		// async redirect({ url, baseUrl }) {
+		// 	// const jwt = cookies().get('client-jwt');
+
+		// 	// return `${baseUrl}/portal/login/${jwt}`;
+		// 	return url;
+		// },
 		session: ({ session, token }) => {
 			return {
 				...session,

@@ -3,6 +3,7 @@ import { IReq, IRes } from '../../sharedTypes';
 import { handleError } from '../utils';
 import { Communications } from '../models/Communications';
 import { PermissionType, validatePermission } from '../models/Permissions';
+import { Database } from '../models/Database';
 
 export async function getCommunicationsInScope(
 	req: IReq,
@@ -23,7 +24,15 @@ export async function getCommunicationsInScope(
 			PermissionType.COMMUNICATIONS_READ,
 			scope
 		);
+
+		console.log(
+			`User ${req.currentUser.userId} CAN READ comms in scope ${scope}`
+		);
 	} catch (e) {
+		console.log(
+			`User ${req.currentUser.userId} CANNOT READ comms in scope ${scope}`
+		);
+
 		return res.status(403).json({ communications: [], total: 0, page: 1 });
 	}
 
@@ -60,6 +69,24 @@ export async function addCommunicationInScope(
 	const { userId: from } = req.currentUser;
 
 	try {
+		// Validate that the user can communicate with the target user
+		try {
+			await validatePermission(
+				req,
+				req.currentUser.userId,
+				PermissionType.COMMUNICATIONS_CREATE,
+				scope
+			);
+
+			console.log(`User ${req.currentUser.userId} CAN send to ${scope}`);
+		} catch (e) {
+			console.log(
+				`User ${req.currentUser.userId} CANNOT send to ${scope}`
+			);
+
+			return res.sendStatus(403);
+		}
+
 		const handler = new Communications(req, from, scope);
 
 		await handler.addCommunication(to, message, scope);

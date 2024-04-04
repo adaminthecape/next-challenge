@@ -3,6 +3,7 @@
 // Get the user's communications
 
 import { IReq, IRes } from '../../sharedTypes';
+import { LoginManager } from '../models/Login';
 
 export async function getAllUserData(req: IReq, res: IRes): Promise<IRes> {
 	// Validate each permission along the way

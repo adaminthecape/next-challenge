@@ -10,6 +10,7 @@
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
+		"@faker-js/faker": "^8.4.1",
 		"@firebase/app": "^0.9.29",
 		"@firebase/auth": "^1.6.2",
 		"@firebase/database": "^1.0.3",

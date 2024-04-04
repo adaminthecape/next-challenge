@@ -212,6 +212,32 @@ export class LoginManager {
 		}
 	}
 
+	public static async changeLoginStatus(
+		req: IReq,
+		userId: UUID,
+		status: LoginStatus
+	): Promise<boolean> {
+		const db = await Database.getInstance(req);
+
+		try {
+			await db.update(
+				`UPDATE logins SET status = ? WHERE userId = ? LIMIT 1`,
+				[status, userId]
+			);
+
+			console.log('Updated state to', status, 'for user', userId);
+
+			return true;
+		} catch (e) {
+			handleError({
+				message: `Failed to get existing session for user ${userId}`,
+				error: e,
+			});
+
+			return false;
+		}
+	}
+
 	private req: IReq;
 	private userId: UUID;
 
@@ -225,34 +251,6 @@ export class LoginManager {
 				message,
 				throw: new Error(message),
 			});
-		}
-	}
-
-	public async changeLoginStatus(
-		userId: UUID,
-		status: LoginStatus
-	): Promise<boolean> {
-		const db = await Database.getInstance(this.req);
-
-		// TODO: Validate the request owner as admin
-		// TODO: Validate the request owner as outranking the other user
-
-		try {
-			await db.update(
-				`UPDATE logins SET status = ? WHERE userId = ? LIMIT 1`,
-				[status, userId]
-			);
-
-			console.log('Updated state to', status, 'for user', userId);
-
-			return true;
-		} catch (e) {
-			handleError({
-				message: `Failed to get existing session for user ${this.userId}`,
-				error: e,
-			});
-
-			return false;
 		}
 	}
 }

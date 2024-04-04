@@ -40,7 +40,7 @@ export default function UserControls({
 			>
 				<Avatar
 					size={40}
-					name={user.userId}
+					name={user?.userId}
 					variant='marble'
 					colors={[
 						'#92A1C6',
@@ -50,7 +50,7 @@ export default function UserControls({
 						'#C20D90',
 					]}
 				/>
-				<div className='ml-2'>{user.username}</div>
+				<div className='ml-2'>{user?.username}</div>
 			</div>
 			<ul
 				className='menu bg-base-200 w-56 rounded-box'

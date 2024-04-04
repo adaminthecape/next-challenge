@@ -27,8 +27,6 @@ export default function Pagination({
 		const prev = Math.ceil(Math.max(1, current - 1));
 		const targetPage = isNext ? next : prev;
 
-		console.log({ next, prev, targetPage, current });
-
 		let vars = baseRoute.match(/\[\w+\]/gi) as string[];
 		let url = baseRoute.replace(
 			`[${pageParam}]`,
@@ -57,7 +55,7 @@ export default function Pagination({
 	let linkKey = 0;
 
 	return (
-		<div className='join mt-4'>
+		<div className='join mt-4 mb-4'>
 			<Link
 				key={linkKey}
 				href={getUrl(false)}

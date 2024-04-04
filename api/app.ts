@@ -16,6 +16,13 @@ import communications from './routes/communications';
 
 import { Server } from 'socket.io';
 import http from 'http';
+import {
+	testCommunicateInAllowedScopes,
+	testCreateGroups,
+	testCreateUsers,
+	testJoinGroups,
+	testVerifyUsers,
+} from './controllers/dev';
 
 configureEnv();
 
@@ -47,14 +54,15 @@ export async function setUserInReq(
 	next: any
 ): Promise<any> {
 	try {
+		console.log('setUserInReq: start');
 		// Decode the JWT, get the user's id, and add it to the req
 		const { authorization } = req.headers;
 
 		if (!authorization) {
 			// realtime chat - needs jwt for real data
-			if (req.url?.startsWith('/socket.io/')) {
-				return next();
-			}
+			// if (req.url?.startsWith('/socket.io/')) {
+			// 	return next();
+			// }
 			console.log(
 				'before fail:',
 				authorization,
@@ -70,6 +78,16 @@ export async function setUserInReq(
 		const userData = decodeJWT(authorization || '');
 
 		if (!userData) {
+			console.log(
+				'before fail 2:',
+				authorization,
+				req.url,
+				req.params,
+				req.query,
+				req.body,
+				userData
+			);
+
 			return res.sendStatus(403);
 		}
 
@@ -125,6 +143,12 @@ app.post('/test/test', async (req: IReq, res: IRes) => {
 
 	return res.sendStatus(200);
 });
+
+app.post('/dev/createUsers', testCreateUsers);
+app.post('/dev/verifyUsers', testVerifyUsers);
+app.post('/dev/createComms', testCommunicateInAllowedScopes);
+app.post('/dev/createGroups', testCreateGroups);
+app.post('/dev/joinGroups', testJoinGroups);
 
 // WEBSOCKETS - FOR CHAT
 // const server = http.createServer((req: any, res: any) => {});
